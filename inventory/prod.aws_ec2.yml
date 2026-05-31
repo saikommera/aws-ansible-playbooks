@@ -1,0 +1,25 @@
+plugin: amazon.aws.aws_ec2
+regions:
+  - us-east-1
+  - us-west-2
+
+filters:
+  instance-state-name: running
+  tag:Environment: prod
+  tag:ManagedBy: terraform
+
+keyed_groups:
+  - prefix: role
+    key: tags.Role
+  - prefix: env
+    key: tags.Environment
+  - prefix: az
+    key: placement.availability_zone
+
+hostnames:
+  - private-ip-address
+
+compose:
+  ansible_host: private_ip_address
+  ec2_instance_id: instance_id
+  ec2_region: placement.region
