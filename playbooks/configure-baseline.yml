@@ -1,0 +1,76 @@
+---
+- name: Configure EC2 Security Baseline (CIS Level 1)
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    ssh_port: 22
+    allowed_ssh_users: "{{ vault_allowed_ssh_users }}"
+
+  roles:
+    - common
+    - node-exporter
+    - cloudwatch-agent
+
+  tasks:
+    - name: Ensure automatic security updates are enabled
+      package:
+        name: unattended-upgrades
+        state: present
+      when: ansible_os_family == "Debian"
+
+    - name: Disable root SSH login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^PermitRootLogin"
+        line: "PermitRootLogin no"
+        state: present
+      notify: Restart sshd
+
+    - name: Disable password authentication
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        state: present
+      notify: Restart sshd
+
+    - name: Set maximum authentication attempts
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: "^MaxAuthTries"
+        line: "MaxAuthTries 3"
+        state: present
+      notify: Restart sshd
+
+    - name: Install and configure auditd
+      package:
+        name: auditd
+        state: present
+
+    - name: Enable auditd service
+      service:
+        name: auditd
+        state: started
+        enabled: true
+
+    - name: Configure CloudWatch agent
+      template:
+        src: templates/cloudwatch-agent-config.json.j2
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+        owner: root
+        group: root
+        mode: "0644"
+      notify: Restart CloudWatch agent
+
+  handlers:
+    - name: Restart sshd
+      service:
+        name: sshd
+        state: restarted
+
+    - name: Restart CloudWatch agent
+      service:
+        name: amazon-cloudwatch-agent
+        state: restarted
