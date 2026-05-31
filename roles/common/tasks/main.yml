@@ -1,0 +1,53 @@
+---
+- name: Update package cache
+  apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == "Debian"
+
+- name: Update package cache (RHEL)
+  yum:
+    update_cache: true
+  when: ansible_os_family == "RedHat"
+
+- name: Install common packages
+  package:
+    name: "{{ common_packages }}"
+    state: present
+
+- name: Set timezone
+  timezone:
+    name: "{{ system_timezone | default('UTC') }}"
+
+- name: Configure NTP
+  template:
+    src: timesyncd.conf.j2
+    dest: /etc/systemd/timesyncd.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart timesyncd
+
+- name: Set system limits
+  pam_limits:
+    domain: "*"
+    limit_type: "{{ item.type }}"
+    limit_item: "{{ item.item }}"
+    value: "{{ item.value }}"
+  loop:
+    - { type: soft, item: nofile, value: 65536 }
+    - { type: hard, item: nofile, value: 65536 }
+    - { type: soft, item: nproc, value: 32768 }
+
+- name: Configure sysctl for network performance
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - { key: net.core.somaxconn, value: 65535 }
+    - { key: net.ipv4.tcp_max_syn_backlog, value: 65535 }
+    - { key: net.ipv4.ip_local_port_range, value: "1024 65535" }
+    - { key: vm.swappiness, value: 10 }
